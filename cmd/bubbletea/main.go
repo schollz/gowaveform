@@ -3,11 +3,16 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/schollz/gowaveform"
 )
+
+type marker struct {
+	time float64 // Time position in seconds
+}
 
 type model struct {
 	wavFile     string
@@ -21,15 +26,21 @@ type model struct {
 	end           float64 // End time in seconds
 	totalDuration float64 // Total duration of the audio file
 
+	// Marker state
+	markers        []marker // All markers
+	selectedMarker int      // Index of selected marker (-1 if none selected)
+
 	// Error handling
 	err error
 }
 
 func initialModel(wavFile string) model {
 	return model{
-		wavFile: wavFile,
-		start:   0.0,
-		end:     0.0, // Will be set to total duration
+		wavFile:        wavFile,
+		start:          0.0,
+		end:            0.0, // Will be set to total duration
+		markers:        []marker{},
+		selectedMarker: -1,
 	}
 }
 
@@ -78,14 +89,173 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 
-		case "left", "shift+left":
-			// Jog left - shift the view earlier in time
-			duration := m.end - m.start
-			step := duration * 0.005 // Move 0.5% of current view (default)
-
-			if msg.String() == "shift+left" {
-				step = duration * 0.05 // Move 5% of current view (faster)
+		case "m", " ":
+			// Create new marker at midpoint of current view
+			midpoint := (m.start + m.end) / 2.0
+			m.markers = append(m.markers, marker{time: midpoint})
+			// Sort markers by time
+			sort.Slice(m.markers, func(i, j int) bool {
+				return m.markers[i].time < m.markers[j].time
+			})
+			// Select the newly created marker
+			for i, mrk := range m.markers {
+				if mrk.time == midpoint {
+					m.selectedMarker = i
+					break
+				}
 			}
+
+		case "tab":
+			// Cycle through markers in view
+			if len(m.markers) == 0 {
+				m.selectedMarker = -1
+			} else {
+				// Find markers in current view
+				visibleMarkers := []int{}
+				for i, mrk := range m.markers {
+					if mrk.time >= m.start && mrk.time <= m.end {
+						visibleMarkers = append(visibleMarkers, i)
+					}
+				}
+
+				if len(visibleMarkers) == 0 {
+					m.selectedMarker = -1
+				} else if m.selectedMarker == -1 {
+					// Select first visible marker
+					m.selectedMarker = visibleMarkers[0]
+				} else {
+					// Find current in visible list and select next
+					currentIdx := -1
+					for i, idx := range visibleMarkers {
+						if idx == m.selectedMarker {
+							currentIdx = i
+							break
+						}
+					}
+					if currentIdx == -1 {
+						// Current marker not visible, select first
+						m.selectedMarker = visibleMarkers[0]
+					} else {
+						// Cycle to next
+						nextIdx := (currentIdx + 1) % len(visibleMarkers)
+						m.selectedMarker = visibleMarkers[nextIdx]
+					}
+				}
+			}
+
+		case "esc":
+			// Unselect marker
+			m.selectedMarker = -1
+
+		case "d", "backspace":
+			// Delete selected marker
+			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+				// Remove the marker
+				m.markers = append(m.markers[:m.selectedMarker], m.markers[m.selectedMarker+1:]...)
+				// Unselect (or select previous if any remain)
+				if len(m.markers) == 0 {
+					m.selectedMarker = -1
+				} else if m.selectedMarker >= len(m.markers) {
+					m.selectedMarker = len(m.markers) - 1
+				}
+				// No need to re-sort, we just removed an element
+			}
+
+		case "left":
+			duration := m.end - m.start
+			step := duration * 0.005 // Move 0.5% of current view
+
+			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+				// Jog selected marker
+				m.markers[m.selectedMarker].time -= step
+				// Clamp to valid range
+				if m.markers[m.selectedMarker].time < 0 {
+					m.markers[m.selectedMarker].time = 0
+				}
+				if m.markers[m.selectedMarker].time > m.totalDuration {
+					m.markers[m.selectedMarker].time = m.totalDuration
+				}
+				// Re-sort markers
+				sort.Slice(m.markers, func(i, j int) bool {
+					return m.markers[i].time < m.markers[j].time
+				})
+			} else {
+				// Jog view
+				m.start -= step
+				m.end -= step
+
+				// Clamp to valid range
+				if m.start < 0 {
+					m.start = 0
+					m.end = duration
+				}
+
+				// Regenerate view
+				if m.waveform != nil {
+					view, err := m.waveform.GenerateView(gowaveform.WaveformOptions{
+						Start: m.start,
+						End:   m.end,
+						Width: m.width,
+					})
+					if err != nil {
+						m.err = err
+						return m, tea.Quit
+					}
+					m.currentView = view
+				}
+			}
+
+		case "right":
+			duration := m.end - m.start
+			step := duration * 0.005 // Move 0.5% of current view
+
+			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+				// Jog selected marker
+				m.markers[m.selectedMarker].time += step
+				// Clamp to valid range
+				if m.markers[m.selectedMarker].time < 0 {
+					m.markers[m.selectedMarker].time = 0
+				}
+				if m.markers[m.selectedMarker].time > m.totalDuration {
+					m.markers[m.selectedMarker].time = m.totalDuration
+				}
+				// Re-sort markers
+				sort.Slice(m.markers, func(i, j int) bool {
+					return m.markers[i].time < m.markers[j].time
+				})
+			} else {
+				// Jog view
+				m.start += step
+				m.end += step
+
+				// Clamp to valid range
+				if m.end > m.totalDuration {
+					m.end = m.totalDuration
+					m.start = m.end - duration
+					if m.start < 0 {
+						m.start = 0
+					}
+				}
+
+				// Regenerate view
+				if m.waveform != nil {
+					view, err := m.waveform.GenerateView(gowaveform.WaveformOptions{
+						Start: m.start,
+						End:   m.end,
+						Width: m.width,
+					})
+					if err != nil {
+						m.err = err
+						return m, tea.Quit
+					}
+					m.currentView = view
+				}
+			}
+
+		case "shift+left":
+			// Shift+left always jogs the waveform (fast)
+			duration := m.end - m.start
+			step := duration * 0.05 // Move 5% of current view
 
 			m.start -= step
 			m.end -= step
@@ -110,14 +280,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = view
 			}
 
-		case "right", "shift+right":
-			// Jog right - shift the view later in time
+		case "shift+right":
+			// Shift+right always jogs the waveform (fast)
 			duration := m.end - m.start
-			step := duration * 0.005 // Move 0.5% of current view (default)
-
-			if msg.String() == "shift+right" {
-				step = duration * 0.05 // Move 5% of current view (faster)
-			}
+			step := duration * 0.05 // Move 5% of current view
 
 			m.start += step
 			m.end += step
@@ -239,20 +405,24 @@ func (m model) View() string {
 	var sb strings.Builder
 
 	// Draw the waveform
-	waveformStr := renderWaveform(m.currentView, m.width, m.height-6, m.start, m.end)
+	waveformStr := renderWaveform(m.currentView, m.width, m.height-6, m.start, m.end, m.markers, m.selectedMarker)
 	sb.WriteString(waveformStr)
 	sb.WriteString("\n")
 
 	// Display information
-	sb.WriteString(fmt.Sprintf("File: %s | Duration: %.2fs | Viewing: %.2fs - %.2fs (%.2fs)\n",
-		m.wavFile, m.totalDuration, m.start, m.end, m.end-m.start))
-	sb.WriteString("Controls: ← → (jog) | Shift+← → (fast jog) | ↑ ↓ (zoom) | q (quit)\n")
+	sb.WriteString(fmt.Sprintf("File: %s | Duration: %.2fs | Viewing: %.2fs - %.2fs (%.2fs) | Markers: %d",
+		m.wavFile, m.totalDuration, m.start, m.end, m.end-m.start, len(m.markers)))
+	if m.selectedMarker >= 0 {
+		sb.WriteString(fmt.Sprintf(" | Selected: %.3fs", m.markers[m.selectedMarker].time))
+	}
+	sb.WriteString("\n")
+	sb.WriteString("Controls: m/Space (marker) | Tab (select) | d/Backspace (delete) | Esc (unselect) | ← → (jog) | Shift+← → (fast) | ↑ ↓ (zoom) | q (quit)\n")
 
 	return sb.String()
 }
 
 // renderWaveform renders the waveform data as high-resolution art using Unicode block characters
-func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end float64) string {
+func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end float64, markers []marker, selectedMarker int) string {
 	if data == nil || len(data.Data) == 0 {
 		return "No waveform data"
 	}
@@ -322,21 +492,54 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 		}
 	}
 
+	// Calculate marker positions in pixels
+	markerPositions := make(map[int]bool)      // x positions of all markers
+	selectedMarkerPos := -1                     // x position of selected marker
+	duration := end - start
+
+	for i, mrk := range markers {
+		if mrk.time >= start && mrk.time <= end {
+			// Calculate x position
+			xPos := int(float64(width-1) * (mrk.time - start) / duration)
+			if xPos >= 0 && xPos < width {
+				markerPositions[xPos] = true
+				if i == selectedMarker {
+					selectedMarkerPos = xPos
+				}
+			}
+		}
+	}
+
 	// Convert high-resolution grid to block characters
 	// Split rendering into upper and lower halves for proper block usage
 	var sb strings.Builder
 	centerY := height / 2
 
+	// ANSI color codes
+	const (
+		colorReset    = "\033[0m"
+		colorYellow   = "\033[33m"  // Unselected markers
+		colorCyan     = "\033[36m"  // Selected marker
+	)
+
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			// Determine if we're in upper or lower half
+			var char string
 			if y < centerY {
 				// Upper half: use lower blocks inverted (hanging from top of cell)
-				char := getUpperHalfChar(grid, x, y, segmentsPerChar)
-				sb.WriteString(char)
+				char = getUpperHalfChar(grid, x, y, segmentsPerChar)
 			} else {
 				// Lower half: use upper blocks (extending from bottom of cell)
-				char := getLowerHalfChar(grid, x, y, segmentsPerChar)
+				char = getLowerHalfChar(grid, x, y, segmentsPerChar)
+			}
+
+			// Apply color if this is a marker position
+			if x == selectedMarkerPos {
+				sb.WriteString(colorCyan + char + colorReset)
+			} else if markerPositions[x] {
+				sb.WriteString(colorYellow + char + colorReset)
+			} else {
 				sb.WriteString(char)
 			}
 		}
