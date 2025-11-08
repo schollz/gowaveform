@@ -243,14 +243,19 @@ func (m model) View() string {
 	return sb.String()
 }
 
-// renderWaveform renders the waveform data as ASCII art with timestamp ruler
+// renderWaveform renders the waveform data as high-resolution art using Unicode block characters
 func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end float64) string {
 	if data == nil || len(data.Data) == 0 {
 		return "No waveform data"
 	}
 
-	// Create a 2D grid for the waveform
-	grid := make([][]bool, height)
+	// Use 8 vertical segments per character for higher resolution
+	// This means we multiply height by 8 for our internal grid
+	const segmentsPerChar = 8
+	virtualHeight := height * segmentsPerChar
+
+	// Create a higher resolution grid (8 segments per character height)
+	grid := make([][]bool, virtualHeight)
 	for i := range grid {
 		grid[i] = make([]bool, width)
 	}
@@ -278,9 +283,8 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 		minVal := data.Data[i*2]
 		maxVal := data.Data[i*2+1]
 
-		// Normalize to height
-		// Center is at height/2
-		center := height / 2
+		// Normalize to virtual height
+		center := virtualHeight / 2
 
 		minY := center - int(float64(minVal)/float64(maxAbs)*float64(center))
 		maxY := center - int(float64(maxVal)/float64(maxAbs)*float64(center))
@@ -289,14 +293,14 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 		if minY < 0 {
 			minY = 0
 		}
-		if minY >= height {
-			minY = height - 1
+		if minY >= virtualHeight {
+			minY = virtualHeight - 1
 		}
 		if maxY < 0 {
 			maxY = 0
 		}
-		if maxY >= height {
-			maxY = height - 1
+		if maxY >= virtualHeight {
+			maxY = virtualHeight - 1
 		}
 
 		// Ensure minY <= maxY (since we're working in screen coordinates)
@@ -310,14 +314,22 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 		}
 	}
 
-	// Convert grid to string
+	// Convert high-resolution grid to block characters
+	// Split rendering into upper and lower halves for proper block usage
 	var sb strings.Builder
+	centerY := height / 2
+
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			if grid[y][x] {
-				sb.WriteString("█")
+			// Determine if we're in upper or lower half
+			if y < centerY {
+				// Upper half: use lower blocks inverted (hanging from top of cell)
+				char := getUpperHalfChar(grid, x, y, segmentsPerChar)
+				sb.WriteString(char)
 			} else {
-				sb.WriteString(" ")
+				// Lower half: use upper blocks (extending from bottom of cell)
+				char := getLowerHalfChar(grid, x, y, segmentsPerChar)
+				sb.WriteString(char)
 			}
 		}
 		sb.WriteString("\n")
@@ -327,6 +339,98 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 	sb.WriteString(generateTimestampRuler(width, start, end))
 
 	return sb.String()
+}
+
+// getUpperHalfChar returns block character for upper half of waveform
+// Uses upper blocks (measuring down from top of character cell)
+func getUpperHalfChar(grid [][]bool, x, y, segmentsPerChar int) string {
+	baseY := y * segmentsPerChar
+
+	// Find the lowest filled segment (deepest extent into this cell from top)
+	lowestFilled := -1
+	for i := segmentsPerChar - 1; i >= 0; i-- {
+		segY := baseY + i
+		if segY < len(grid) && grid[segY][x] {
+			lowestFilled = i
+			break
+		}
+	}
+
+	// If nothing filled, return empty
+	if lowestFilled == -1 {
+		return " "
+	}
+
+	// Use upper blocks that hang from the top
+	// lowestFilled ranges from 0 (top) to 7 (bottom of cell)
+	// Upper blocks fill from top, so we map based on extent
+	extent := lowestFilled + 1 // +1 because index 0 means 1 segment filled
+
+	switch extent {
+	case 1:
+		return "▔" // U+2594 Upper one eighth
+	case 2:
+		return "🮂" // U+1FB02 Upper one quarter
+	case 3:
+		return "🮃" // U+1FB03 Upper three eighths
+	case 4:
+		return "▀" // U+2580 Upper half
+	case 5:
+		return "🮄" // U+1FB04 Upper five eighths
+	case 6:
+		return "🮅" // U+1FB05 Upper three quarters
+	case 7:
+		return "🮆" // U+1FB06 Upper seven eighths
+	default: // 8
+		return "█" // U+2588 - full cell
+	}
+}
+
+// getLowerHalfChar returns block character for lower half of waveform
+// Uses lower blocks (measuring up from bottom of character cell)
+func getLowerHalfChar(grid [][]bool, x, y, segmentsPerChar int) string {
+	baseY := y * segmentsPerChar
+
+	// Find the highest filled segment (highest extent into this cell from bottom)
+	highestFilled := -1
+	for i := 0; i < segmentsPerChar; i++ {
+		segY := baseY + i
+		if segY < len(grid) && grid[segY][x] {
+			highestFilled = i
+			break
+		}
+	}
+
+	// If nothing filled, return empty
+	if highestFilled == -1 {
+		return " "
+	}
+
+	// Use lower blocks that extend from the bottom
+	// highestFilled ranges from 0 (top of cell) to 7 (bottom of cell)
+	// Lower blocks fill from bottom, so we need to invert
+	// If segment 0 (top) is filled, we need a full or near-full block
+	// If segment 7 (bottom) is filled, we need just a small bottom block
+	extent := segmentsPerChar - highestFilled
+
+	switch extent {
+	case 1:
+		return "▁" // U+2581 - one eighth from bottom
+	case 2:
+		return "▂" // U+2582
+	case 3:
+		return "▃" // U+2583
+	case 4:
+		return "▄" // U+2584
+	case 5:
+		return "▅" // U+2585
+	case 6:
+		return "▆" // U+2586
+	case 7:
+		return "▇" // U+2587
+	default: // 8
+		return "█" // U+2588 - full cell
+	}
 }
 
 // generateTimestampRuler creates a timestamp ruler below the waveform
