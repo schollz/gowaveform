@@ -134,6 +134,14 @@ func LoadWaveform(filename string) (*Waveform, error) {
 	return waveform, nil
 }
 
+// Duration returns the total duration of the audio in seconds
+func (w *Waveform) Duration() float64 {
+	if w.SampleRate == 0 {
+		return 0
+	}
+	return float64(w.totalSamples) / float64(w.SampleRate)
+}
+
 // GenerateView generates a waveform view from the loaded audio data
 func (w *Waveform) GenerateView(opts WaveformOptions) (*WaveformData, error) {
 	startSample := int(opts.Start * float64(w.SampleRate))
