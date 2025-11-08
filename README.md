@@ -2,6 +2,9 @@
 
 Pure Go implementation for generating waveform JSON data from WAV files, compatible with [audiowaveform](https://codeberg.org/chrisn/audiowaveform) JSON format.
 
+<img width="1081" height="500" alt="newplot (1)" src="https://github.com/user-attachments/assets/ee2ec52d-895b-48ef-9bc8-f7c6386d7378" />
+
+
 ## Features
 
 - Read WAV files (PCM format, 8-bit and 16-bit) using [go-audio/wav](https://github.com/go-audio/wav)
