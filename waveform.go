@@ -1,12 +1,14 @@
 package gowaveform
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"os"
+
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 )
 
 // WaveformData represents the JSON output format compatible with audiowaveform
@@ -36,79 +38,30 @@ type WAVHeader struct {
 	DataOffset    int64
 }
 
-// ReadWAVHeader reads and parses a WAV file header
+// ReadWAVHeader reads and parses a WAV file header using go-audio/wav
 func ReadWAVHeader(r io.ReadSeeker) (*WAVHeader, error) {
-	// Read RIFF header
-	riffHeader := make([]byte, 12)
-	if _, err := io.ReadFull(r, riffHeader); err != nil {
-		return nil, fmt.Errorf("failed to read RIFF header: %w", err)
+	// Create decoder
+	decoder := wav.NewDecoder(r)
+	if !decoder.IsValidFile() {
+		return nil, fmt.Errorf("not a valid WAV file")
 	}
 
-	if string(riffHeader[0:4]) != "RIFF" {
-		return nil, fmt.Errorf("not a valid WAV file: missing RIFF header")
+	// Check for PCM format
+	if decoder.WavAudioFormat != 1 {
+		return nil, fmt.Errorf("unsupported audio format: %d (only PCM is supported)", decoder.WavAudioFormat)
 	}
 
-	if string(riffHeader[8:12]) != "WAVE" {
-		return nil, fmt.Errorf("not a valid WAV file: missing WAVE format")
+	// Forward to PCM chunk to get size information
+	if err := decoder.FwdToPCM(); err != nil {
+		return nil, fmt.Errorf("failed to read PCM chunk: %w", err)
 	}
 
-	header := &WAVHeader{}
-
-	// Read chunks until we find fmt and data
-	for {
-		chunkHeader := make([]byte, 8)
-		if _, err := io.ReadFull(r, chunkHeader); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("failed to read chunk header: %w", err)
-		}
-
-		chunkID := string(chunkHeader[0:4])
-		chunkSize := binary.LittleEndian.Uint32(chunkHeader[4:8])
-
-		switch chunkID {
-		case "fmt ":
-			fmtData := make([]byte, chunkSize)
-			if _, err := io.ReadFull(r, fmtData); err != nil {
-				return nil, fmt.Errorf("failed to read fmt chunk: %w", err)
-			}
-
-			audioFormat := binary.LittleEndian.Uint16(fmtData[0:2])
-			if audioFormat != 1 {
-				return nil, fmt.Errorf("unsupported audio format: %d (only PCM is supported)", audioFormat)
-			}
-
-			header.Channels = binary.LittleEndian.Uint16(fmtData[2:4])
-			header.SampleRate = binary.LittleEndian.Uint32(fmtData[4:8])
-			header.BitsPerSample = binary.LittleEndian.Uint16(fmtData[14:16])
-
-		case "data":
-			header.DataSize = chunkSize
-			pos, err := r.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get current position: %w", err)
-			}
-			header.DataOffset = pos
-			// Skip data chunk for now
-			if _, err := r.Seek(int64(chunkSize), io.SeekCurrent); err != nil {
-				return nil, fmt.Errorf("failed to skip data chunk: %w", err)
-			}
-
-		default:
-			// Skip unknown chunks
-			if _, err := r.Seek(int64(chunkSize), io.SeekCurrent); err != nil {
-				return nil, fmt.Errorf("failed to skip chunk %s: %w", chunkID, err)
-			}
-		}
-	}
-
-	if header.SampleRate == 0 {
-		return nil, fmt.Errorf("invalid WAV file: missing fmt chunk")
-	}
-
-	if header.DataSize == 0 {
-		return nil, fmt.Errorf("invalid WAV file: missing data chunk")
+	header := &WAVHeader{
+		SampleRate:    decoder.SampleRate,
+		Channels:      decoder.NumChans,
+		BitsPerSample: decoder.BitDepth,
+		DataSize:      uint32(decoder.PCMSize),
+		DataOffset:    0, // The decoder handles positioning internally
 	}
 
 	return header, nil
@@ -122,19 +75,30 @@ func GenerateWaveformData(filename string, opts WaveformOptions) (*WaveformData,
 	}
 	defer file.Close()
 
-	header, err := ReadWAVHeader(file)
-	if err != nil {
-		return nil, err
+	// Create decoder
+	decoder := wav.NewDecoder(file)
+	if !decoder.IsValidFile() {
+		return nil, fmt.Errorf("not a valid WAV file")
 	}
 
-	// Calculate sample range
-	bytesPerSample := int(header.BitsPerSample) / 8
-	totalSamples := int(header.DataSize) / (int(header.Channels) * bytesPerSample)
+	// Check for PCM format
+	if decoder.WavAudioFormat != 1 {
+		return nil, fmt.Errorf("unsupported audio format: %d (only PCM is supported)", decoder.WavAudioFormat)
+	}
 
-	startSample := int(opts.Start * float64(header.SampleRate))
+	// Forward to PCM chunk to get size information
+	if err := decoder.FwdToPCM(); err != nil {
+		return nil, fmt.Errorf("failed to read PCM chunk: %w", err)
+	}
+
+	// Calculate total samples (frames, not individual channel samples)
+	bytesPerSample := int(decoder.BitDepth) / 8
+	totalSamples := decoder.PCMSize / (int(decoder.NumChans) * bytesPerSample)
+
+	startSample := int(opts.Start * float64(decoder.SampleRate))
 	endSample := totalSamples
 	if opts.End > 0 {
-		endSample = int(opts.End * float64(header.SampleRate))
+		endSample = int(opts.End * float64(decoder.SampleRate))
 	}
 
 	if startSample < 0 {
@@ -152,33 +116,36 @@ func GenerateWaveformData(filename string, opts WaveformOptions) (*WaveformData,
 		samplesPerPixel = 256 // Default zoom level
 	}
 
-	// Seek to start of data chunk + offset for start sample
-	startOffset := header.DataOffset + int64(startSample*int(header.Channels)*bytesPerSample)
-	if _, err := file.Seek(startOffset, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("failed to seek to start position: %w", err)
+	// Seek to start sample if needed
+	if startSample > 0 {
+		// Seek position is in samples (frames), not bytes
+		if _, err := decoder.Seek(int64(startSample), io.SeekStart); err != nil {
+			return nil, fmt.Errorf("failed to seek to start position: %w", err)
+		}
 	}
 
-	// Read and process audio data
-	samplesToRead := endSample - startSample
+	// Initialize waveform data
 	waveformData := &WaveformData{
 		Version:         2,
-		Channels:        int(header.Channels),
-		SampleRate:      int(header.SampleRate),
+		Channels:        int(decoder.NumChans),
+		SampleRate:      int(decoder.SampleRate),
 		SamplesPerPixel: samplesPerPixel,
-		Bits:            int(header.BitsPerSample),
+		Bits:            int(decoder.BitDepth),
 		Length:          0,
 		Data:            []int16{},
 	}
 
-	// Process samples in chunks (pixels)
+	// Read and process audio data
+	samplesToRead := endSample - startSample
 	samplesRead := 0
+
 	for samplesRead < samplesToRead {
 		samplesToProcess := samplesPerPixel
 		if samplesRead+samplesToProcess > samplesToRead {
 			samplesToProcess = samplesToRead - samplesRead
 		}
 
-		min, max, err := readPeaks(file, header, samplesToProcess)
+		min, max, err := readPeaksFromDecoder(decoder, samplesToProcess)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -197,8 +164,71 @@ func GenerateWaveformData(filename string, opts WaveformOptions) (*WaveformData,
 	return waveformData, nil
 }
 
-// readPeaks reads a chunk of samples and returns the min and max values
+// readPeaksFromDecoder reads a chunk of samples from the decoder and returns the min and max values
+func readPeaksFromDecoder(decoder *wav.Decoder, sampleCount int) (int16, int16, error) {
+	// Calculate buffer size: sampleCount frames * number of channels
+	bufferSize := sampleCount * int(decoder.NumChans)
+	
+	intBuf := &audio.IntBuffer{
+		Data:   make([]int, bufferSize),
+		Format: decoder.Format(),
+	}
+
+	n, err := decoder.PCMBuffer(intBuf)
+	if err != nil && err != io.EOF {
+		return 0, 0, err
+	}
+	if n == 0 {
+		return 0, 0, io.EOF
+	}
+
+	var min, max int16 = math.MaxInt16, math.MinInt16
+
+	// Process samples - IntBuffer.Data contains interleaved samples for all channels
+	// Convert from int to int16 range
+	bitDepth := int(decoder.BitDepth)
+	for i := 0; i < n; i++ {
+		// Convert int sample to int16 based on bit depth
+		var sample int16
+		switch bitDepth {
+		case 16:
+			sample = int16(intBuf.Data[i])
+		case 8:
+			// 8-bit samples are in the range 0-255, scaled to int range
+			// Convert to signed 16-bit range
+			sample = int16((intBuf.Data[i] - 128) << 8)
+		case 24:
+			// 24-bit samples, scale to 16-bit
+			sample = int16(intBuf.Data[i] >> 8)
+		case 32:
+			// 32-bit samples, scale to 16-bit
+			sample = int16(intBuf.Data[i] >> 16)
+		default:
+			// For other bit depths, try to scale appropriately
+			sample = int16(intBuf.Data[i])
+		}
+
+		if sample < min {
+			min = sample
+		}
+		if sample > max {
+			max = sample
+		}
+	}
+
+	if min == math.MaxInt16 && max == math.MinInt16 {
+		// No samples were read
+		min, max = 0, 0
+	}
+
+	return min, max, nil
+}
+
+// readPeaks is kept for backward compatibility but now uses a simpler approach
+// This function is used in tests
 func readPeaks(r io.Reader, header *WAVHeader, sampleCount int) (int16, int16, error) {
+	// This is a legacy function for compatibility with tests
+	// It reads raw bytes and processes them directly
 	bytesPerSample := int(header.BitsPerSample) / 8
 	bytesToRead := sampleCount * int(header.Channels) * bytesPerSample
 
@@ -220,7 +250,8 @@ func readPeaks(r io.Reader, header *WAVHeader, sampleCount int) (int16, int16, e
 			if i+1 >= n {
 				break
 			}
-			sample := int16(binary.LittleEndian.Uint16(buffer[i : i+2]))
+			// Read as little-endian int16
+			sample := int16(uint16(buffer[i]) | uint16(buffer[i+1])<<8)
 			if sample < min {
 				min = sample
 			}
