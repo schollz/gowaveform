@@ -4,11 +4,11 @@ Pure Go implementation for generating waveform JSON data from WAV files, compati
 
 ## Features
 
-- Read WAV files (PCM format, 8-bit and 16-bit)
+- Read WAV files (PCM format, 8-bit and 16-bit) using [go-audio/wav](https://github.com/go-audio/wav)
 - Generate waveform data with configurable zoom levels (samples per pixel)
 - Support for arbitrary start and end times
 - JSON output compatible with audiowaveform format
-- Pure Go implementation with no external dependencies
+- Pure Go implementation
 
 ## Installation
 
