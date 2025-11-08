@@ -1,5 +1,10 @@
 # gowaveform
 
+[![CI](https://github.com/schollz/gowaveform/actions/workflows/CI.yml/badge.svg)](https://github.com/schollz/gowaveform/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/schollz/gowaveform/branch/main/graph/badge.svg)](https://codecov.io/gh/schollz/gowaveform)
+[![Go Reference](https://pkg.go.dev/badge/github.com/schollz/gowaveform.svg)](https://pkg.go.dev/github.com/schollz/gowaveform)
+[![Release](https://img.shields.io/github/v/release/schollz/gowaveform.svg)](https://github.com/schollz/gowaveform/releases/latest)
+
 Pure Go implementation for generating waveform JSON data from WAV files, compatible with [audiowaveform](https://codeberg.org/chrisn/audiowaveform) JSON format.
 
 <img width="1081" height="500" alt="newplot (1)" src="https://github.com/user-attachments/assets/ee2ec52d-895b-48ef-9bc8-f7c6386d7378" />
