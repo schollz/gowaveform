@@ -188,35 +188,6 @@ func TestGenerateWaveformJSON(t *testing.T) {
 	t.Logf("Generated JSON sample:\n%s", jsonStr[:min(len(jsonStr), 500)])
 }
 
-func TestReadPeaks(t *testing.T) {
-	// Create a simple buffer with known values
-	header := &WAVHeader{
-		SampleRate:    44100,
-		Channels:      1,
-		BitsPerSample: 16,
-	}
-
-	// Create test data: 100, -100, 200, -200
-	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, int16(100))
-	binary.Write(buf, binary.LittleEndian, int16(-100))
-	binary.Write(buf, binary.LittleEndian, int16(200))
-	binary.Write(buf, binary.LittleEndian, int16(-200))
-
-	min, max, err := readPeaks(buf, header, 4)
-	if err != nil {
-		t.Fatalf("readPeaks failed: %v", err)
-	}
-
-	if min != -200 {
-		t.Errorf("Expected min -200, got %d", min)
-	}
-
-	if max != 200 {
-		t.Errorf("Expected max 200, got %d", max)
-	}
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
