@@ -78,10 +78,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 
-		case "left":
+		case "left", "shift+left":
 			// Jog left - shift the view earlier in time
 			duration := m.end - m.start
-			step := duration * 0.005 // Move 0.5% of current view
+			step := duration * 0.005 // Move 0.5% of current view (default)
+
+			if msg.String() == "shift+left" {
+				step = duration * 0.05 // Move 5% of current view (faster)
+			}
 
 			m.start -= step
 			m.end -= step
@@ -106,10 +110,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentView = view
 			}
 
-		case "right":
+		case "right", "shift+right":
 			// Jog right - shift the view later in time
 			duration := m.end - m.start
-			step := duration * 0.005 // Move 0.5% of current view
+			step := duration * 0.005 // Move 0.5% of current view (default)
+
+			if msg.String() == "shift+right" {
+				step = duration * 0.05 // Move 5% of current view (faster)
+			}
 
 			m.start += step
 			m.end += step
@@ -238,7 +246,7 @@ func (m model) View() string {
 	// Display information
 	sb.WriteString(fmt.Sprintf("File: %s | Duration: %.2fs | Viewing: %.2fs - %.2fs (%.2fs)\n",
 		m.wavFile, m.totalDuration, m.start, m.end, m.end-m.start))
-	sb.WriteString("Controls: ← → (jog) | ↑ ↓ (zoom) | q (quit)\n")
+	sb.WriteString("Controls: ← → (jog) | Shift+← → (fast jog) | ↑ ↓ (zoom) | q (quit)\n")
 
 	return sb.String()
 }
