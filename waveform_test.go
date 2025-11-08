@@ -195,6 +195,82 @@ func min(a, b int) int {
 	return b
 }
 
+func TestWaveformGenerateViewWithWidth(t *testing.T) {
+	tmpFile := "/tmp/test_view_width.wav"
+	defer os.Remove(tmpFile)
+
+	// Create a 2 second test file at 44100 Hz
+	createTestWAV(t, tmpFile, 44100, 2.0)
+
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Test with width=500 for full file
+	opts := WaveformOptions{
+		Start: 0,
+		End:   0,
+		Width: 500,
+	}
+
+	data, err := waveform.GenerateView(opts)
+	if err != nil {
+		t.Fatalf("GenerateView failed: %v", err)
+	}
+
+	// The resulting length should be close to 500 pixels
+	// Allow some tolerance due to integer division
+	if data.Length < 490 || data.Length > 510 {
+		t.Errorf("Expected length around 500 pixels, got %d", data.Length)
+	}
+
+	// Verify samples_per_pixel was calculated correctly
+	// For 2 seconds at 44100 Hz = 88200 samples
+	// 88200 / 500 = 176.4 samples per pixel
+	expectedSamplesPerPixel := 88200 / 500
+	if data.SamplesPerPixel < expectedSamplesPerPixel-10 || data.SamplesPerPixel > expectedSamplesPerPixel+10 {
+		t.Errorf("Expected samples_per_pixel around %d, got %d", expectedSamplesPerPixel, data.SamplesPerPixel)
+	}
+}
+
+func TestWaveformGenerateViewWithWidthAndRange(t *testing.T) {
+	tmpFile := "/tmp/test_view_width_range.wav"
+	defer os.Remove(tmpFile)
+
+	// Create a 5 second test file
+	createTestWAV(t, tmpFile, 44100, 5.0)
+
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Test with width=800 for a 2 second range (from 1.0 to 3.0 seconds)
+	opts := WaveformOptions{
+		Start: 1.0,
+		End:   3.0,
+		Width: 800,
+	}
+
+	data, err := waveform.GenerateView(opts)
+	if err != nil {
+		t.Fatalf("GenerateView failed: %v", err)
+	}
+
+	// The resulting length should be close to 800 pixels
+	if data.Length < 790 || data.Length > 810 {
+		t.Errorf("Expected length around 800 pixels, got %d", data.Length)
+	}
+
+	// For 2 seconds at 44100 Hz = 88200 samples
+	// 88200 / 800 = 110.25 samples per pixel
+	expectedSamplesPerPixel := 88200 / 800
+	if data.SamplesPerPixel < expectedSamplesPerPixel-10 || data.SamplesPerPixel > expectedSamplesPerPixel+10 {
+		t.Errorf("Expected samples_per_pixel around %d, got %d", expectedSamplesPerPixel, data.SamplesPerPixel)
+	}
+}
+
 func TestInvalidWAVFile(t *testing.T) {
 	tmpFile := "/tmp/test_invalid.wav"
 	defer os.Remove(tmpFile)

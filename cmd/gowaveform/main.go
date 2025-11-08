@@ -16,7 +16,8 @@ func main() {
 	outputFile := flag.String("o", "", "Output JSON file (default: stdout)")
 	start := flag.Float64("start", 0, "Start time in seconds (default: 0)")
 	end := flag.Float64("end", 0, "End time in seconds (default: end of file)")
-	zoom := flag.Int("z", 256, "Zoom level (samples per pixel, default: 256)")
+	zoom := flag.Int("z", 256, "Zoom level (samples per pixel, default: 256, ignored if -w is specified)")
+	width := flag.Int("w", 0, "Target width in pixels (if specified, zoom is calculated automatically)")
 	plot := flag.Bool("plot", false, "Plot waveform using Plotly (requires plotly to be installed)")
 
 	flag.Usage = func() {
@@ -24,8 +25,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Generate waveform JSON data from WAV files.\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExample:\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  gowaveform -i input.wav -o output.json -start 0 -end 10 -z 512\n")
+		fmt.Fprintf(os.Stderr, "  gowaveform -i input.wav -o output.json -w 1000\n")
 	}
 
 	flag.Parse()
@@ -48,6 +50,7 @@ func main() {
 		Start:           *start,
 		End:             *end,
 		SamplesPerPixel: *zoom,
+		Width:           *width,
 	}
 
 	jsonData, err := gowaveform.GenerateWaveformJSON(*inputFile, opts)

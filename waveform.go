@@ -35,7 +35,8 @@ type WaveformData struct {
 type WaveformOptions struct {
 	Start           float64 // Start time in seconds
 	End             float64 // End time in seconds (0 means end of file)
-	SamplesPerPixel int     // Zoom level (samples per pixel)
+	SamplesPerPixel int     // Zoom level (samples per pixel). Ignored if Width is specified.
+	Width           int     // Target width in pixels. If specified, SamplesPerPixel is calculated automatically.
 }
 
 // WAVHeader represents the WAV file header
@@ -151,8 +152,16 @@ func (w *Waveform) GenerateView(opts WaveformOptions) (*WaveformData, error) {
 		return nil, fmt.Errorf("invalid range: start must be before end")
 	}
 
+	// Calculate samples per pixel based on width or use the specified value
 	samplesPerPixel := opts.SamplesPerPixel
-	if samplesPerPixel <= 0 {
+	if opts.Width > 0 {
+		// Calculate zoom level to fit the requested range into the specified width
+		samplesToRead := endSample - startSample
+		samplesPerPixel = samplesToRead / opts.Width
+		if samplesPerPixel <= 0 {
+			samplesPerPixel = 1 // Minimum zoom level
+		}
+	} else if samplesPerPixel <= 0 {
 		samplesPerPixel = 256 // Default zoom level
 	}
 
