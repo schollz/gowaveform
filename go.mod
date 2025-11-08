@@ -1,6 +1,6 @@
 module github.com/schollz/gowaveform
 
-go 1.24.9
+go 1.25
 
 require (
 	github.com/go-audio/audio v1.0.0
