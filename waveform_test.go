@@ -280,3 +280,307 @@ func BenchmarkGenerateWaveformData(b *testing.B) {
 		}
 	}
 }
+
+func TestLoadWaveform(t *testing.T) {
+	tmpFile := "/tmp/test_load_waveform.wav"
+	defer os.Remove(tmpFile)
+
+	createTestWAV(t, tmpFile, 44100, 1.0)
+
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	if waveform.SampleRate != 44100 {
+		t.Errorf("Expected sample rate 44100, got %d", waveform.SampleRate)
+	}
+
+	if waveform.Channels != 1 {
+		t.Errorf("Expected 1 channel, got %d", waveform.Channels)
+	}
+
+	if waveform.BitsPerSample != 16 {
+		t.Errorf("Expected 16 bits per sample, got %d", waveform.BitsPerSample)
+	}
+
+	expectedSamples := 44100 // 1 second at 44100 Hz
+	if waveform.totalSamples != expectedSamples {
+		t.Errorf("Expected %d total samples, got %d", expectedSamples, waveform.totalSamples)
+	}
+
+	// Audio data should contain totalSamples * Channels elements
+	expectedDataLen := expectedSamples * waveform.Channels
+	if len(waveform.audioData) != expectedDataLen {
+		t.Errorf("Expected audio data length %d, got %d", expectedDataLen, len(waveform.audioData))
+	}
+}
+
+func TestWaveformGenerateView(t *testing.T) {
+	tmpFile := "/tmp/test_generate_view.wav"
+	defer os.Remove(tmpFile)
+
+	createTestWAV(t, tmpFile, 44100, 2.0)
+
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Test full file view
+	opts := WaveformOptions{
+		Start:           0,
+		End:             0, // End of file
+		SamplesPerPixel: 256,
+	}
+
+	data, err := waveform.GenerateView(opts)
+	if err != nil {
+		t.Fatalf("GenerateView failed: %v", err)
+	}
+
+	if data.Version != 2 {
+		t.Errorf("Expected version 2, got %d", data.Version)
+	}
+
+	if data.SampleRate != 44100 {
+		t.Errorf("Expected sample rate 44100, got %d", data.SampleRate)
+	}
+
+	if data.Channels != 1 {
+		t.Errorf("Expected 1 channel, got %d", data.Channels)
+	}
+
+	if len(data.Data) == 0 {
+		t.Error("Expected non-empty data array")
+	}
+
+	// Data should be in min/max pairs
+	if len(data.Data)%2 != 0 {
+		t.Error("Data length should be even (min/max pairs)")
+	}
+}
+
+func TestWaveformGenerateMultipleViews(t *testing.T) {
+	tmpFile := "/tmp/test_multiple_views.wav"
+	defer os.Remove(tmpFile)
+
+	createTestWAV(t, tmpFile, 44100, 3.0)
+
+	// Load once
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Generate multiple different views
+	view1, err := waveform.GenerateView(WaveformOptions{
+		Start:           0,
+		End:             1.0,
+		SamplesPerPixel: 256,
+	})
+	if err != nil {
+		t.Fatalf("GenerateView 1 failed: %v", err)
+	}
+
+	view2, err := waveform.GenerateView(WaveformOptions{
+		Start:           1.0,
+		End:             2.0,
+		SamplesPerPixel: 512,
+	})
+	if err != nil {
+		t.Fatalf("GenerateView 2 failed: %v", err)
+	}
+
+	view3, err := waveform.GenerateView(WaveformOptions{
+		Start:           0.5,
+		End:             2.5,
+		SamplesPerPixel: 128,
+	})
+	if err != nil {
+		t.Fatalf("GenerateView 3 failed: %v", err)
+	}
+
+	// Verify different views have different characteristics
+	if view1.SamplesPerPixel != 256 {
+		t.Errorf("View 1: expected 256 samples per pixel, got %d", view1.SamplesPerPixel)
+	}
+
+	if view2.SamplesPerPixel != 512 {
+		t.Errorf("View 2: expected 512 samples per pixel, got %d", view2.SamplesPerPixel)
+	}
+
+	if view3.SamplesPerPixel != 128 {
+		t.Errorf("View 3: expected 128 samples per pixel, got %d", view3.SamplesPerPixel)
+	}
+
+	// View 2 should have roughly half the length of view 1 (same duration, double zoom)
+	expectedRatio := float64(view1.Length) / float64(view2.Length)
+	if expectedRatio < 1.8 || expectedRatio > 2.2 {
+		t.Errorf("Expected length ratio around 2.0, got %.2f (view1: %d, view2: %d)",
+			expectedRatio, view1.Length, view2.Length)
+	}
+}
+
+func TestWaveformGenerateViewWithRange(t *testing.T) {
+	tmpFile := "/tmp/test_view_range.wav"
+	defer os.Remove(tmpFile)
+
+	createTestWAV(t, tmpFile, 44100, 2.0)
+
+	waveform, err := LoadWaveform(tmpFile)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	opts := WaveformOptions{
+		Start:           0.5,
+		End:             1.5,
+		SamplesPerPixel: 128,
+	}
+
+	data, err := waveform.GenerateView(opts)
+	if err != nil {
+		t.Fatalf("GenerateView failed: %v", err)
+	}
+
+	// Should have approximately 1 second of data
+	// At 44100 Hz with 128 samples per pixel: 44100 / 128 ≈ 344 pixels
+	expectedPixels := (1.0 * 44100) / 128
+	actualPixels := float64(data.Length)
+
+	// Allow some tolerance
+	if actualPixels < expectedPixels*0.9 || actualPixels > expectedPixels*1.1 {
+		t.Errorf("Expected approximately %.0f pixels, got %.0f", expectedPixels, actualPixels)
+	}
+}
+
+// Benchmarks using the real amen_170.wav file
+func BenchmarkLoadWaveform_AmenBreak(b *testing.B) {
+	const amenFile = "data/amen_170.wav"
+	
+	// Check if file exists, skip if not
+	if _, err := os.Stat(amenFile); os.IsNotExist(err) {
+		b.Skip("Skipping benchmark: data/amen_170.wav not found")
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := LoadWaveform(amenFile)
+		if err != nil {
+			b.Fatalf("LoadWaveform failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkGenerateView_AmenBreak(b *testing.B) {
+	const amenFile = "data/amen_170.wav"
+	
+	// Check if file exists, skip if not
+	if _, err := os.Stat(amenFile); os.IsNotExist(err) {
+		b.Skip("Skipping benchmark: data/amen_170.wav not found")
+	}
+
+	// Load once before benchmarking
+	waveform, err := LoadWaveform(amenFile)
+	if err != nil {
+		b.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	opts := WaveformOptions{
+		Start:           0,
+		End:             0,
+		SamplesPerPixel: 256,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := waveform.GenerateView(opts)
+		if err != nil {
+			b.Fatalf("GenerateView failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkMultipleViews_AmenBreak(b *testing.B) {
+	const amenFile = "data/amen_170.wav"
+	
+	// Check if file exists, skip if not
+	if _, err := os.Stat(amenFile); os.IsNotExist(err) {
+		b.Skip("Skipping benchmark: data/amen_170.wav not found")
+	}
+
+	// Load once before benchmarking
+	waveform, err := LoadWaveform(amenFile)
+	if err != nil {
+		b.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Define different views to generate
+	views := []WaveformOptions{
+		{Start: 0, End: 0, SamplesPerPixel: 256},    // Full file, normal zoom
+		{Start: 0, End: 1.0, SamplesPerPixel: 512},  // First second, zoomed in
+		{Start: 0.5, End: 1.5, SamplesPerPixel: 128}, // Middle section, zoomed out
+		{Start: 0, End: 0, SamplesPerPixel: 1024},   // Full file, zoomed in
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, opts := range views {
+			_, err := waveform.GenerateView(opts)
+			if err != nil {
+				b.Fatalf("GenerateView failed: %v", err)
+			}
+		}
+	}
+}
+
+func BenchmarkOldAPI_AmenBreak(b *testing.B) {
+	const amenFile = "data/amen_170.wav"
+	
+	// Check if file exists, skip if not
+	if _, err := os.Stat(amenFile); os.IsNotExist(err) {
+		b.Skip("Skipping benchmark: data/amen_170.wav not found")
+	}
+
+	opts := WaveformOptions{
+		Start:           0,
+		End:             0,
+		SamplesPerPixel: 256,
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := GenerateWaveformData(amenFile, opts)
+		if err != nil {
+			b.Fatalf("GenerateWaveformData failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkOldAPIMultipleViews_AmenBreak(b *testing.B) {
+	const amenFile = "data/amen_170.wav"
+	
+	// Check if file exists, skip if not
+	if _, err := os.Stat(amenFile); os.IsNotExist(err) {
+		b.Skip("Skipping benchmark: data/amen_170.wav not found")
+	}
+
+	// Define different views to generate (same as new API benchmark)
+	views := []WaveformOptions{
+		{Start: 0, End: 0, SamplesPerPixel: 256},
+		{Start: 0, End: 1.0, SamplesPerPixel: 512},
+		{Start: 0.5, End: 1.5, SamplesPerPixel: 128},
+		{Start: 0, End: 0, SamplesPerPixel: 1024},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, opts := range views {
+			_, err := GenerateWaveformData(amenFile, opts)
+			if err != nil {
+				b.Fatalf("GenerateWaveformData failed: %v", err)
+			}
+		}
+	}
+}
