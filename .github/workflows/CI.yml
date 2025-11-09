@@ -33,7 +33,8 @@ jobs:
         if [[ "$VERSION" == "refs/heads/"* ]]; then
           VERSION="dev-${GITHUB_SHA::7}"
         fi
-        go build -ldflags="-X main.Version=$VERSION" -o gowaveform ./cmd/gowaveform
+        cd cmd/gowaveform
+        go build -ldflags="-X main.Version=$VERSION" -o gowaveform .
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
