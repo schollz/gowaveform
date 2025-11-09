@@ -24,7 +24,7 @@ Pure Go implementation for generating waveform JSON data from WAV files, compati
 go get github.com/schollz/gowaveform
 ```
 
-To install the CLI tool:
+To install the terminal-based waveform visualizer:
 
 ```bash
 go install github.com/schollz/gowaveform/cmd/gowaveform@latest
@@ -58,29 +58,27 @@ func main() {
 }
 ```
 
-### As a CLI Tool
+### Terminal-Based Waveform Visualizer
+
+The CLI tool provides an interactive terminal-based waveform visualizer for navigating, zooming, and marking positions in WAV files.
 
 ```bash
-# Generate waveform for entire file
-gowaveform -i input.wav -o output.json
-
-# Generate waveform for specific time range with custom zoom
-gowaveform -i input.wav -o output.json -start 5.0 -end 15.0 -z 512
-
-# Output to stdout
-gowaveform -i input.wav
-
-# Custom zoom level (samples per pixel)
-gowaveform -i input.wav -o output.json -z 1024
+# Launch the interactive visualizer
+gowaveform audio.wav
 ```
 
-### CLI Options
-
-- `-i` : Input WAV file (required)
-- `-o` : Output JSON file (default: stdout)
-- `-start` : Start time in seconds (default: 0)
-- `-end` : End time in seconds (default: end of file)
-- `-z` : Zoom level, samples per pixel (default: 256)
+**Controls:**
+- `m` / `Space` - Create marker at center of view
+- `o` - Run onset detection and create markers
+- `Tab` - Cycle through slices
+- `Shift+Tab` - Cycle through markers
+- `d` / `Backspace` - Delete selected marker/slice
+- `e` - Export slices to JSON
+- `Esc` - Unselect marker/slice
+- `←` / `→` - Jog view or selected marker
+- `Shift+←` / `Shift+→` - Fast jog view
+- `↑` / `↓` - Zoom in/out
+- `q` - Quit
 
 ## JSON Output Format
 
@@ -113,11 +111,15 @@ The `data` array contains min/max pairs for each pixel, allowing visualization p
 ## Example
 
 ```bash
-# Create a waveform from a 60-second audio file, zoomed to show detail
-gowaveform -i song.wav -o waveform.json -z 512
+# Generate waveform JSON data programmatically
+gowaveform.GenerateWaveformJSON("song.wav", gowaveform.WaveformOptions{
+    Start: 0,
+    End: 60,
+    SamplesPerPixel: 512,
+})
 
-# Generate waveform for a 10-second segment
-gowaveform -i podcast.wav -o segment.json -start 30 -end 40 -z 256
+# Use the interactive terminal visualizer
+gowaveform song.wav
 ```
 
 ## License
