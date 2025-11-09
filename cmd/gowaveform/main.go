@@ -114,17 +114,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "tab":
-			// Cycle through slices
+			// Cycle through slices in view
 			if len(m.markers) < 2 {
 				m.selectedSlice = -1
 			} else {
-				numSlices := len(m.markers) - 1
-				if m.selectedSlice == -1 {
-					// Select first slice
-					m.selectedSlice = 0
+				// Find slices that are at least partially visible in current view
+				visibleSlices := []int{}
+				for i := 0; i < len(m.markers)-1; i++ {
+					sliceStart := m.markers[i].time
+					sliceEnd := m.markers[i+1].time
+					// Slice is visible if it overlaps with current view
+					if sliceEnd >= m.start && sliceStart <= m.end {
+						visibleSlices = append(visibleSlices, i)
+					}
+				}
+
+				if len(visibleSlices) == 0 {
+					m.selectedSlice = -1
+				} else if m.selectedSlice == -1 {
+					// Select first visible slice
+					m.selectedSlice = visibleSlices[0]
 				} else {
-					// Cycle to next slice
-					m.selectedSlice = (m.selectedSlice + 1) % numSlices
+					// Find current in visible list and select next
+					currentIdx := -1
+					for i, idx := range visibleSlices {
+						if idx == m.selectedSlice {
+							currentIdx = i
+							break
+						}
+					}
+					if currentIdx == -1 {
+						// Current slice not visible, select first
+						m.selectedSlice = visibleSlices[0]
+					} else {
+						// Cycle to next
+						nextIdx := (currentIdx + 1) % len(visibleSlices)
+						m.selectedSlice = visibleSlices[nextIdx]
+					}
 				}
 			}
 			// Unselect marker when selecting slice
@@ -176,8 +202,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedSlice = -1
 
 		case "d", "backspace":
-			// Delete selected marker
-			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+			// Delete selected slice or marker
+			if m.selectedSlice >= 0 && m.selectedSlice < len(m.markers)-1 {
+				// Delete the start marker of the selected slice
+				// This removes the slice by removing its start boundary
+				m.markers = append(m.markers[:m.selectedSlice], m.markers[m.selectedSlice+1:]...)
+				// Move selection to previous slice
+				if len(m.markers) < 2 {
+					// No slices left
+					m.selectedSlice = -1
+				} else {
+					// Select previous slice
+					m.selectedSlice--
+					if m.selectedSlice < 0 {
+						m.selectedSlice = 0
+					}
+					// Make sure we're still in valid range
+					if m.selectedSlice >= len(m.markers)-1 {
+						m.selectedSlice = len(m.markers) - 2
+					}
+					if m.selectedSlice < 0 {
+						m.selectedSlice = -1
+					}
+				}
+			} else if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
 				// Remove the marker
 				m.markers = append(m.markers[:m.selectedMarker], m.markers[m.selectedMarker+1:]...)
 				// Unselect (or select previous if any remain)
@@ -209,7 +257,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for _, onsetTime := range result.Onsets {
 					m.markers = append(m.markers, marker{time: onsetTime})
 				}
-				m.exportMessage = fmt.Sprintf("Found %d onsets", result.NumSlices)
+				m.exportMessage = fmt.Sprintf("Found %d onsets", len(result.Onsets))
 				m.selectedMarker = -1
 				m.selectedSlice = -1
 			}
@@ -233,7 +281,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			duration := m.end - m.start
 			step := duration * 0.005 // Move 0.5% of current view
 
-			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+			if m.selectedSlice >= 0 && m.selectedSlice < len(m.markers)-1 {
+				// Jog selected slice start position (move the marker at the start of the slice)
+				m.markers[m.selectedSlice].time -= step
+				// Clamp to valid range
+				if m.selectedSlice > 0 {
+					// Don't go before the previous marker
+					if m.markers[m.selectedSlice].time < m.markers[m.selectedSlice-1].time {
+						m.markers[m.selectedSlice].time = m.markers[m.selectedSlice-1].time
+					}
+				} else {
+					// First marker, clamp to 0
+					if m.markers[m.selectedSlice].time < 0 {
+						m.markers[m.selectedSlice].time = 0
+					}
+				}
+				// Don't go past the end marker of the slice
+				if m.markers[m.selectedSlice].time > m.markers[m.selectedSlice+1].time {
+					m.markers[m.selectedSlice].time = m.markers[m.selectedSlice+1].time
+				}
+			} else if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
 				// Jog selected marker
 				m.markers[m.selectedMarker].time -= step
 				// Clamp to valid range
@@ -277,7 +344,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			duration := m.end - m.start
 			step := duration * 0.005 // Move 0.5% of current view
 
-			if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
+			if m.selectedSlice >= 0 && m.selectedSlice < len(m.markers)-1 {
+				// Jog selected slice start position (move the marker at the start of the slice)
+				m.markers[m.selectedSlice].time += step
+				// Clamp to valid range
+				if m.selectedSlice > 0 {
+					// Don't go before the previous marker
+					if m.markers[m.selectedSlice].time < m.markers[m.selectedSlice-1].time {
+						m.markers[m.selectedSlice].time = m.markers[m.selectedSlice-1].time
+					}
+				} else {
+					// First marker, clamp to 0
+					if m.markers[m.selectedSlice].time < 0 {
+						m.markers[m.selectedSlice].time = 0
+					}
+				}
+				// Don't go past the end marker of the slice
+				if m.markers[m.selectedSlice].time > m.markers[m.selectedSlice+1].time {
+					m.markers[m.selectedSlice].time = m.markers[m.selectedSlice+1].time
+				}
+			} else if m.selectedMarker >= 0 && m.selectedMarker < len(m.markers) {
 				// Jog selected marker
 				m.markers[m.selectedMarker].time += step
 				// Clamp to valid range
@@ -506,22 +592,16 @@ func (m model) View() string {
 	sb.WriteString("\n")
 
 	// Display information
-	sb.WriteString(fmt.Sprintf("File: %s | Duration: %.2fs | Viewing: %.2fs - %.2fs (%.2fs) | Markers: %d",
-		m.wavFile, m.totalDuration, m.start, m.end, m.end-m.start, len(m.markers)))
+	sb.WriteString(fmt.Sprintf("File: %s | Duration: %.2fs | Markers: %d",
+		m.wavFile, m.totalDuration, len(m.markers)))
 	if m.selectedMarker >= 0 {
 		sb.WriteString(fmt.Sprintf(" | Selected Marker: %.3fs", m.markers[m.selectedMarker].time))
 	}
-	if m.selectedSlice >= 0 && m.selectedSlice < len(m.markers)-1 {
-		sliceStart := m.markers[m.selectedSlice].time
-		sliceEnd := m.markers[m.selectedSlice+1].time
-		sb.WriteString(fmt.Sprintf(" | Selected Slice %d: %.3fs - %.3fs (%.3fs)",
-			m.selectedSlice, sliceStart, sliceEnd, sliceEnd-sliceStart))
+	if m.exportMessage != "" {
+		sb.WriteString(fmt.Sprintf(" | %s", m.exportMessage))
 	}
 	sb.WriteString("\n")
 	sb.WriteString("Controls: m/Space (marker) | o (onset detect) | Tab (slice) | Shift+Tab (marker) | d/Backspace (delete) | e (export) | Esc (unselect) | ← → (jog) | Shift+← → (fast) | ↑ ↓ (zoom) | q (quit)\n")
-	if m.exportMessage != "" {
-		sb.WriteString(fmt.Sprintf("\n%s\n", m.exportMessage))
-	}
 
 	return sb.String()
 }
