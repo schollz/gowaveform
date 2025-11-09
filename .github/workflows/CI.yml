@@ -27,6 +27,14 @@ jobs:
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+    - name: Build binary
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/}"
+        if [[ "$VERSION" == "refs/heads/"* ]]; then
+          VERSION="dev-${GITHUB_SHA::7}"
+        fi
+        go build -ldflags="-X main.Version=$VERSION" -o gowaveform ./cmd/gowaveform
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
