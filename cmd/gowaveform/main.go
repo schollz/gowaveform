@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/schollz/gowaveform"
-	"github.com/schollz/gowaveform/onset"
+	onset "github.com/schollz/onsets"
 	"github.com/spf13/cobra"
 )
 
@@ -518,7 +518,7 @@ func (m model) View() string {
 			m.selectedSlice, sliceStart, sliceEnd, sliceEnd-sliceStart))
 	}
 	sb.WriteString("\n")
-	sb.WriteString("Controls: m/Space (marker) | Tab (slice) | Shift+Tab (marker) | d/Backspace (delete) | e (export) | Esc (unselect) | ← → (jog) | Shift+← → (fast) | ↑ ↓ (zoom) | q (quit)\n")
+	sb.WriteString("Controls: m/Space (marker) | o (onset detect) | Tab (slice) | Shift+Tab (marker) | d/Backspace (delete) | e (export) | Esc (unselect) | ← → (jog) | Shift+← → (fast) | ↑ ↓ (zoom) | q (quit)\n")
 	if m.exportMessage != "" {
 		sb.WriteString(fmt.Sprintf("\n%s\n", m.exportMessage))
 	}
@@ -598,9 +598,9 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 	}
 
 	// Calculate marker positions in pixels
-	markerPositions := make(map[int]bool)      // x positions of all markers
-	selectedMarkerPos := -1                     // x position of selected marker
-	selectedSliceRange := [2]int{-1, -1}       // x range of selected slice [start, end]
+	markerPositions := make(map[int]bool) // x positions of all markers
+	selectedMarkerPos := -1               // x position of selected marker
+	selectedSliceRange := [2]int{-1, -1}  // x range of selected slice [start, end]
 	duration := end - start
 
 	for i, mrk := range markers {
@@ -646,11 +646,11 @@ func renderWaveform(data *gowaveform.WaveformData, width, height int, start, end
 
 	// ANSI color codes
 	const (
-		colorReset      = "\033[0m"
-		colorYellow     = "\033[33m"  // Unselected markers
-		colorCyan       = "\033[36m"  // Selected marker
-		colorGreen      = "\033[32m"  // Selected slice
-		colorGreenBold  = "\033[1;32m" // Selected slice (bold)
+		colorReset     = "\033[0m"
+		colorYellow    = "\033[33m"   // Unselected markers
+		colorCyan      = "\033[36m"   // Selected marker
+		colorGreen     = "\033[32m"   // Selected slice
+		colorGreenBold = "\033[1;32m" // Selected slice (bold)
 	)
 
 	for y := 0; y < height; y++ {
