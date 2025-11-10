@@ -16,6 +16,7 @@ Pure Go implementation for generating waveform JSON data from WAV files, compati
 - Generate waveform data with configurable zoom levels (samples per pixel)
 - Support for arbitrary start and end times
 - JSON output compatible with audiowaveform format
+- **Save waveform visualizations as PNG or JPEG images** with customizable dimensions and colors
 - Pure Go implementation
 
 ## Installation
@@ -33,6 +34,8 @@ go install github.com/schollz/gowaveform/cmd/gowaveform@latest
 ## Usage
 
 ### As a Library
+
+#### Generate JSON Waveform Data
 
 ```go
 package main
@@ -57,6 +60,48 @@ func main() {
     fmt.Println(string(jsonData))
 }
 ```
+
+#### Save Waveform as Image
+
+You can save waveform visualizations as PNG or JPEG images using the plot API:
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/schollz/gowaveform"
+)
+
+func main() {
+    // Load the waveform
+    waveform, err := gowaveform.LoadWaveform("audio.wav")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Save as PNG with custom options
+    err = gowaveform.SavePlot(waveform, "output.png",
+        gowaveform.OptionSetWidth(1200),
+        gowaveform.OptionSetHeight(400),
+        gowaveform.OptionSetBackgroundColor("#FFFFFF"),
+        gowaveform.OptionSetForegroundColor("#0064C8"),
+        gowaveform.OptionShowTimestamp(true),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+**Available Options:**
+- `OptionSetWidth(width int)` - Set plot width in pixels (default: 800)
+- `OptionSetHeight(height int)` - Set plot height in pixels (default: 400)
+- `OptionSetBackgroundColor(hexColor string)` - Set background color (e.g., "#FFFFFF")
+- `OptionSetForegroundColor(hexColor string)` - Set waveform color (e.g., "#0064C8")
+- `OptionShowTimestamp(show bool)` - Enable/disable time axis (default: true)
+
+The file format (PNG or JPEG) is determined by the filename extension.
 
 ### Terminal-Based Waveform Visualizer
 
