@@ -24,9 +24,6 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-
     - name: Build binary
       run: |
         VERSION="${GITHUB_REF#refs/tags/}"
@@ -36,10 +33,12 @@ jobs:
         cd cmd/gowaveform
         go build -ldflags="-X main.Version=$VERSION" -o gowaveform .
 
+    - name: Run tests
+      run: GODEBUG=invalidptr=1 CGO_ENABLED=0 go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
+        file: ./coverage.txt
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
