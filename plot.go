@@ -146,12 +146,16 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 	if !config.showTimestamp {
 		p.X.Label.Text = ""
 		p.X.Tick.Marker = plot.ConstantTicks([]plot.Tick{})
+		p.X.Tick.LineStyle.Width = 0
+		p.X.LineStyle.Width = 0
 	}
 	
 	// Hide y-axis if requested
 	if config.hideYAxis {
 		p.Y.Label.Text = ""
 		p.Y.Tick.Marker = plot.ConstantTicks([]plot.Tick{})
+		p.Y.Tick.LineStyle.Width = 0
+		p.Y.LineStyle.Width = 0
 	}
 
 	// Create XY points from waveform data
