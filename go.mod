@@ -9,12 +9,11 @@ require (
 
 require (
 	codeberg.org/go-fonts/liberation v0.5.0 // indirect
-	codeberg.org/go-latex/latex v0.1.0 // indirect
-	codeberg.org/go-pdf/fpdf v0.10.0 // indirect
-	git.sr.ht/~sbinet/gg v0.6.0 // indirect
+	codeberg.org/go-latex/latex v0.2.0 // indirect
+	codeberg.org/go-pdf/fpdf v0.11.1 // indirect
+	git.sr.ht/~sbinet/gg v0.7.0 // indirect
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
 	github.com/braheezy/shine-mp3 v0.1.0 // indirect
-	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/faiface/beep v1.1.0 // indirect
 	github.com/go-audio/aiff v1.1.0 // indirect
 	github.com/go-audio/audio v1.0.0 // indirect
@@ -29,9 +28,8 @@ require (
 	github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d // indirect
 	github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/schollz/goflac v0.1.0 // indirect
 	github.com/schollz/govorbis v0.0.0-20251109153616-1f3f82bece61 // indirect
-	golang.org/x/image v0.25.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/image v0.32.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 )
