@@ -7,7 +7,7 @@
 
 Pure Go implementation for generating waveform JSON data from WAV files, compatible with [audiowaveform](https://codeberg.org/chrisn/audiowaveform) JSON format.
 
-<img width="1081" height="500" alt="newplot (1)" src="https://github.com/user-attachments/assets/ee2ec52d-895b-48ef-9bc8-f7c6386d7378" />
+<img width="800" height="400" alt="1" src="https://github.com/user-attachments/assets/ad488d2e-e576-421a-8c87-b5f9422e4a14" />
 
 
 ## Features
