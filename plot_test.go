@@ -401,3 +401,84 @@ func TestSavePlotJPEGWithRealAudio(t *testing.T) {
 
 	t.Logf("Successfully created JPEG plot: %s", tmpPlot)
 }
+
+func TestSavePlotHideYAxis(t *testing.T) {
+	tmpWav := "/tmp/test_plot_hide_yaxis.wav"
+	tmpPlot := "/tmp/test_plot_hide_yaxis.png"
+	defer os.Remove(tmpWav)
+	defer os.Remove(tmpPlot)
+
+	// Create a test WAV file
+	createTestWAV(t, tmpWav, 44100, 1.0)
+
+	// Load the waveform
+	waveform, err := LoadWaveform(tmpWav)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Save with y-axis hidden
+	err = SavePlot(waveform, tmpPlot, OptionHideYAxis(true))
+	if err != nil {
+		t.Fatalf("SavePlot failed: %v", err)
+	}
+
+	// Verify the file was created
+	verifyImageFile(t, tmpPlot)
+}
+
+func TestSavePlotWithTitle(t *testing.T) {
+	tmpWav := "/tmp/test_plot_with_title.wav"
+	tmpPlot := "/tmp/test_plot_with_title.png"
+	defer os.Remove(tmpWav)
+	defer os.Remove(tmpPlot)
+
+	// Create a test WAV file
+	createTestWAV(t, tmpWav, 44100, 1.0)
+
+	// Load the waveform
+	waveform, err := LoadWaveform(tmpWav)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Save with custom title
+	customTitle := "My Custom Waveform Title"
+	err = SavePlot(waveform, tmpPlot, OptionSetTitle(customTitle))
+	if err != nil {
+		t.Fatalf("SavePlot failed: %v", err)
+	}
+
+	// Verify the file was created
+	verifyImageFile(t, tmpPlot)
+}
+
+func TestSavePlotWithTitleAndHiddenYAxis(t *testing.T) {
+	tmpWav := "/tmp/test_plot_title_hidden_yaxis.wav"
+	tmpPlot := "/tmp/test_plot_title_hidden_yaxis.png"
+	defer os.Remove(tmpWav)
+	defer os.Remove(tmpPlot)
+
+	// Create a test WAV file
+	createTestWAV(t, tmpWav, 44100, 2.0)
+
+	// Load the waveform
+	waveform, err := LoadWaveform(tmpWav)
+	if err != nil {
+		t.Fatalf("LoadWaveform failed: %v", err)
+	}
+
+	// Save with custom title and hidden y-axis
+	err = SavePlot(waveform, tmpPlot,
+		OptionSetTitle("Audio Visualization"),
+		OptionHideYAxis(true),
+		OptionSetWidth(1000),
+		OptionSetHeight(400),
+	)
+	if err != nil {
+		t.Fatalf("SavePlot failed: %v", err)
+	}
+
+	// Verify the file was created
+	verifyImageFile(t, tmpPlot)
+}

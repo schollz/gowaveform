@@ -18,6 +18,8 @@ type PlotConfig struct {
 	backgroundColor color.Color
 	foregroundColor color.Color
 	showTimestamp   bool
+	hideYAxis       bool
+	title           string
 }
 
 // Option is the type all plot options need to adhere to
@@ -58,6 +60,20 @@ func OptionShowTimestamp(show bool) Option {
 	}
 }
 
+// OptionHideYAxis enables or disables the y-axis display
+func OptionHideYAxis(hide bool) Option {
+	return func(c *PlotConfig) {
+		c.hideYAxis = hide
+	}
+}
+
+// OptionSetTitle sets the title for the plot
+func OptionSetTitle(title string) Option {
+	return func(c *PlotConfig) {
+		c.title = title
+	}
+}
+
 // hexToColor converts a hex color string to color.Color
 // Supports formats: #RGB, #RRGGBB, RGB, RRGGBB
 func hexToColor(hex string) color.Color {
@@ -89,6 +105,8 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 		backgroundColor: color.White,
 		foregroundColor: color.RGBA{R: 0, G: 100, B: 200, A: 255}, // Blue
 		showTimestamp:   true,
+		hideYAxis:       false,
+		title:           "Waveform",
 	}
 
 	// Apply options
@@ -112,17 +130,28 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 	// Set background color
 	p.BackgroundColor = config.backgroundColor
 
-	// Set title and labels
-	p.Title.Text = "Waveform"
+	// Set title
+	p.Title.Text = config.title
+	
+	// Set labels
 	if config.showTimestamp {
 		p.X.Label.Text = "Time (seconds)"
 	}
-	p.Y.Label.Text = "Amplitude"
+	
+	if !config.hideYAxis {
+		p.Y.Label.Text = "Amplitude"
+	}
 
 	// Hide labels if timestamp is disabled
 	if !config.showTimestamp {
 		p.X.Label.Text = ""
 		p.X.Tick.Marker = plot.ConstantTicks([]plot.Tick{})
+	}
+	
+	// Hide y-axis if requested
+	if config.hideYAxis {
+		p.Y.Label.Text = ""
+		p.Y.Tick.Marker = plot.ConstantTicks([]plot.Tick{})
 	}
 
 	// Create XY points from waveform data

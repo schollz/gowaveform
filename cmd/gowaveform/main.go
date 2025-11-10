@@ -1018,6 +1018,8 @@ var (
 	backgroundColor string
 	foregroundColor string
 	noTimestamp     bool
+	hideYAxis       bool
+	plotTitle       string
 )
 
 var rootCmd = &cobra.Command{
@@ -1043,7 +1045,10 @@ You can also generate waveform plots directly to image files using the --output 
   gowaveform audio.wav --output waveform.png --width 1200 --height 400 --bg-color "#FFFFFF" --fg-color "#0064C8"
 
   # Generate a plot without timestamp axis
-  gowaveform audio.wav --output waveform.jpg --no-timestamp`,
+  gowaveform audio.wav --output waveform.jpg --no-timestamp
+  
+  # Generate a plot with custom title and hidden y-axis
+  gowaveform audio.wav --output waveform.png --title "My Audio" --hide-y-axis`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		wavFile := args[0]
@@ -1115,6 +1120,14 @@ func generatePlot(wavFile, outputFile string) error {
 	if noTimestamp {
 		opts = append(opts, gowaveform.OptionShowTimestamp(false))
 	}
+	
+	if hideYAxis {
+		opts = append(opts, gowaveform.OptionHideYAxis(true))
+	}
+	
+	if plotTitle != "" {
+		opts = append(opts, gowaveform.OptionSetTitle(plotTitle))
+	}
 
 	// Save the plot
 	if err := gowaveform.SavePlot(waveform, outputFile, opts...); err != nil {
@@ -1134,6 +1147,8 @@ func init() {
 	rootCmd.Flags().StringVar(&backgroundColor, "bg-color", "", "Background color in hex format (e.g., #FFFFFF)")
 	rootCmd.Flags().StringVar(&foregroundColor, "fg-color", "", "Foreground/waveform color in hex format (e.g., #0064C8)")
 	rootCmd.Flags().BoolVar(&noTimestamp, "no-timestamp", false, "Disable timestamp axis on the plot")
+	rootCmd.Flags().BoolVar(&hideYAxis, "hide-y-axis", false, "Hide the y-axis (amplitude) on the plot")
+	rootCmd.Flags().StringVar(&plotTitle, "title", "", "Set the title for the plot (default: 'Waveform')")
 }
 
 func main() {
