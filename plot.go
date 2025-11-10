@@ -19,6 +19,7 @@ type PlotConfig struct {
 	foregroundColor color.Color
 	showTimestamp   bool
 	hideYAxis       bool
+	hideXAxis       bool
 	title           string
 }
 
