@@ -103,9 +103,46 @@ func main() {
 
 The file format (PNG or JPEG) is determined by the filename extension.
 
-### Terminal-Based Waveform Visualizer
+### Command-Line Tool
 
-The CLI tool provides an interactive terminal-based waveform visualizer for navigating, zooming, and marking positions in WAV files.
+The CLI tool can be used in two modes: interactive visualization or direct image generation.
+
+#### Generate Waveform Images
+
+Generate waveform plots directly to image files without launching the interactive viewer:
+
+```bash
+# Generate a PNG with default settings (800x400)
+gowaveform audio.wav --output waveform.png
+
+# Generate a JPEG with custom dimensions
+gowaveform audio.wav --output waveform.jpg --width 1200 --height 400
+
+# Customize colors (hex format)
+gowaveform audio.wav --output waveform.png \
+  --bg-color "#FFFFFF" --fg-color "#0064C8"
+
+# Generate without timestamp axis
+gowaveform audio.wav --output waveform.png --no-timestamp
+
+# Combine all options
+gowaveform audio.wav --output waveform.png \
+  --width 1600 --height 800 \
+  --bg-color "#1a1a1a" --fg-color "#00d4ff" \
+  --no-timestamp
+```
+
+**Available Flags:**
+- `--output`, `-o` - Output file path (PNG or JPEG format)
+- `--width` - Width of the plot in pixels (default: 800)
+- `--height` - Height of the plot in pixels (default: 400)
+- `--bg-color` - Background color in hex format (e.g., "#FFFFFF")
+- `--fg-color` - Foreground/waveform color in hex format (e.g., "#0064C8")
+- `--no-timestamp` - Disable timestamp axis on the plot
+
+#### Interactive Visualizer
+
+Launch the interactive terminal-based waveform visualizer for navigating, zooming, and marking positions in WAV files:
 
 ```bash
 # Launch the interactive visualizer
@@ -163,6 +200,9 @@ gowaveform.GenerateWaveformJSON("song.wav", gowaveform.WaveformOptions{
     End: 60,
     SamplesPerPixel: 512,
 })
+
+# Generate a waveform image from the command line
+gowaveform song.wav --output waveform.png
 
 # Use the interactive terminal visualizer
 gowaveform song.wav
