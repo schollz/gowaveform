@@ -53,27 +53,23 @@ func TestReadWAVHeader(t *testing.T) {
 
 	createTestWAV(t, tmpFile, 44100, 1.0)
 
-	file, err := os.Open(tmpFile)
+	// ReadWAVHeader is no longer supported with audiomorph
+	// Instead, use LoadWaveform to get audio metadata
+	waveform, err := LoadWaveform(tmpFile)
 	if err != nil {
-		t.Fatalf("Failed to open test file: %v", err)
-	}
-	defer file.Close()
-
-	header, err := ReadWAVHeader(file)
-	if err != nil {
-		t.Fatalf("ReadWAVHeader failed: %v", err)
+		t.Fatalf("LoadWaveform failed: %v", err)
 	}
 
-	if header.SampleRate != 44100 {
-		t.Errorf("Expected sample rate 44100, got %d", header.SampleRate)
+	if waveform.SampleRate != 44100 {
+		t.Errorf("Expected sample rate 44100, got %d", waveform.SampleRate)
 	}
 
-	if header.Channels != 1 {
-		t.Errorf("Expected 1 channel, got %d", header.Channels)
+	if waveform.Channels != 1 {
+		t.Errorf("Expected 1 channel, got %d", waveform.Channels)
 	}
 
-	if header.BitsPerSample != 16 {
-		t.Errorf("Expected 16 bits per sample, got %d", header.BitsPerSample)
+	if waveform.BitsPerSample != 16 {
+		t.Errorf("Expected 16 bits per sample, got %d", waveform.BitsPerSample)
 	}
 }
 
@@ -280,13 +276,7 @@ func TestInvalidWAVFile(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	file, err := os.Open(tmpFile)
-	if err != nil {
-		t.Fatalf("Failed to open test file: %v", err)
-	}
-	defer file.Close()
-
-	_, err = ReadWAVHeader(file)
+	_, err := LoadWaveform(tmpFile)
 	if err == nil {
 		t.Error("Expected error for invalid WAV file, got nil")
 	}

@@ -12,7 +12,7 @@ Pure Go implementation for generating waveform JSON data from WAV files, compati
 
 ## Features
 
-- Read WAV files (PCM format, 8-bit and 16-bit) using [go-audio/wav](https://github.com/go-audio/wav)
+- Read audio files (WAV, MP3, FLAC, OGG, etc.) using [audiomorph](https://github.com/schollz/audiomorph)
 - Generate waveform data with configurable zoom levels (samples per pixel)
 - Support for arbitrary start and end times
 - JSON output compatible with audiowaveform format
@@ -104,9 +104,10 @@ The `data` array contains min/max pairs for each pixel, allowing visualization p
 
 ## Supported Formats
 
-- **Audio Format**: PCM (uncompressed)
-- **Bit Depths**: 8-bit, 16-bit
-- **Channels**: Mono and stereo
+audiomorph supports a wide variety of audio formats including:
+- **Audio Formats**: WAV, MP3, FLAC, OGG, AIFF
+- **Bit Depths**: 8-bit, 16-bit, 24-bit, 32-bit
+- **Channels**: Mono and multi-channel audio
 
 ## Example
 
