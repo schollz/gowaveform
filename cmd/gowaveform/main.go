@@ -1011,6 +1011,15 @@ func generateTimestampRuler(width int, start, end float64) string {
 	return sb.String()
 }
 
+var (
+	outputFile      string
+	plotWidth       int
+	plotHeight      int
+	backgroundColor string
+	foregroundColor string
+	noTimestamp     bool
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "gowaveform [file]",
 	Short: "Interactive WAV file waveform viewer",
@@ -1021,15 +1030,20 @@ The viewer provides high-resolution waveform visualization with the ability to:
   - Navigate through the waveform with arrow keys
   - Zoom in/out to view details or get an overview
   - Place, select, and manage time markers
-  - View precise timing information`,
-	Example: `  # View a WAV file
+  - View precise timing information
+
+You can also generate waveform plots directly to image files using the --output flag.`,
+	Example: `  # View a WAV file interactively
   gowaveform audio.wav
 
-  # View a recording
-  gowaveform recording_2024.wav
+  # Generate a waveform plot to a PNG file
+  gowaveform audio.wav --output waveform.png
 
-  # View from a specific path
-  gowaveform /path/to/file.wav`,
+  # Generate a plot with custom dimensions and colors
+  gowaveform audio.wav --output waveform.png --width 1200 --height 400 --bg-color "#FFFFFF" --fg-color "#0064C8"
+
+  # Generate a plot without timestamp axis
+  gowaveform audio.wav --output waveform.jpg --no-timestamp`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		wavFile := args[0]
@@ -1040,6 +1054,17 @@ The viewer provides high-resolution waveform visualization with the ability to:
 			os.Exit(1)
 		}
 
+		// If output file is specified, run in plot mode
+		if outputFile != "" {
+			if err := generatePlot(wavFile, outputFile); err != nil {
+				fmt.Fprintf(os.Stderr, "Error generating plot: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Waveform plot saved to: %s\n", outputFile)
+			return
+		}
+
+		// Otherwise, run interactive TUI
 		p := tea.NewProgram(
 			initialModel(wavFile),
 			tea.WithAltScreen(),
@@ -1060,8 +1085,55 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+// generatePlot creates a waveform plot and saves it to a file
+func generatePlot(wavFile, outputFile string) error {
+	// Load the waveform
+	waveform, err := gowaveform.LoadWaveform(wavFile)
+	if err != nil {
+		return fmt.Errorf("failed to load waveform: %w", err)
+	}
+
+	// Build options list
+	var opts []gowaveform.Option
+	
+	if plotWidth > 0 {
+		opts = append(opts, gowaveform.OptionSetWidth(plotWidth))
+	}
+	
+	if plotHeight > 0 {
+		opts = append(opts, gowaveform.OptionSetHeight(plotHeight))
+	}
+	
+	if backgroundColor != "" {
+		opts = append(opts, gowaveform.OptionSetBackgroundColor(backgroundColor))
+	}
+	
+	if foregroundColor != "" {
+		opts = append(opts, gowaveform.OptionSetForegroundColor(foregroundColor))
+	}
+	
+	if noTimestamp {
+		opts = append(opts, gowaveform.OptionShowTimestamp(false))
+	}
+
+	// Save the plot
+	if err := gowaveform.SavePlot(waveform, outputFile, opts...); err != nil {
+		return fmt.Errorf("failed to save plot: %w", err)
+	}
+
+	return nil
+}
+
 func init() {
 	rootCmd.AddCommand(versionCmd)
+	
+	// Add flags for plot generation
+	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for waveform plot (PNG or JPEG)")
+	rootCmd.Flags().IntVar(&plotWidth, "width", 800, "Width of the plot in pixels")
+	rootCmd.Flags().IntVar(&plotHeight, "height", 400, "Height of the plot in pixels")
+	rootCmd.Flags().StringVar(&backgroundColor, "bg-color", "", "Background color in hex format (e.g., #FFFFFF)")
+	rootCmd.Flags().StringVar(&foregroundColor, "fg-color", "", "Foreground/waveform color in hex format (e.g., #0064C8)")
+	rootCmd.Flags().BoolVar(&noTimestamp, "no-timestamp", false, "Disable timestamp axis on the plot")
 }
 
 func main() {
