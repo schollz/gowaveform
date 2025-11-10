@@ -21,6 +21,9 @@ type PlotConfig struct {
 	hideYAxis       bool
 	hideXAxis       bool
 	title           string
+	start           float64 // Start time in seconds (0 = beginning)
+	end             float64 // End time in seconds (0 = use full duration)
+	resolution      float64 // Resolution multiplier (1.0 = full resolution, 0.5 = half resolution)
 }
 
 // Option is the type all plot options need to adhere to
@@ -68,10 +71,58 @@ func OptionHideYAxis(hide bool) Option {
 	}
 }
 
+// OptionHideXAxis enables or disables the x-axis display
+func OptionHideXAxis(hide bool) Option {
+	return func(c *PlotConfig) {
+		c.hideXAxis = hide
+	}
+}
+
 // OptionSetTitle sets the title for the plot
 func OptionSetTitle(title string) Option {
 	return func(c *PlotConfig) {
 		c.title = title
+	}
+}
+
+// OptionSetStart sets the start time in seconds for the waveform view
+func OptionSetStart(start float64) Option {
+	return func(c *PlotConfig) {
+		c.start = start
+	}
+}
+
+// OptionSetEnd sets the end time in seconds for the waveform view
+func OptionSetEnd(end float64) Option {
+	return func(c *PlotConfig) {
+		c.end = end
+	}
+}
+
+// OptionSetZoom sets the duration (in seconds) to display, centered around the midpoint
+// If start is set, zoom from start; if end is set, zoom backwards from end
+func OptionSetZoom(duration float64) Option {
+	return func(c *PlotConfig) {
+		// This will be handled specially in SavePlot based on start/end values
+		// For now, we'll store it as the end value and process it later
+		if c.start > 0 {
+			c.end = c.start + duration
+		} else {
+			// Will be calculated in SavePlot when we know total duration
+			c.end = -duration // Negative indicates zoom duration
+		}
+	}
+}
+
+// OptionSetResolution sets the resolution multiplier for waveform generation
+// 1.0 = full resolution (1 pixel per width unit)
+// 0.5 = half resolution (generate with half the width)
+// 2.0 = double resolution (generate with double the width)
+func OptionSetResolution(resolution float64) Option {
+	return func(c *PlotConfig) {
+		if resolution > 0 {
+			c.resolution = resolution
+		}
 	}
 }
 
@@ -107,7 +158,11 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 		foregroundColor: color.RGBA{R: 0, G: 100, B: 200, A: 255}, // Blue
 		showTimestamp:   true,
 		hideYAxis:       false,
-		title:           "Waveform",
+		hideXAxis:       false,
+		title:           "",
+		start:           0,
+		end:             0,
+		resolution:      1.0,
 	}
 
 	// Apply options
@@ -115,11 +170,46 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 		opt(&config)
 	}
 
+	// Get total duration
+	totalDuration := w.Duration()
+
+	// Handle zoom (negative end indicates zoom duration was set)
+	if config.end < 0 {
+		zoomDuration := -config.end
+		if config.start > 0 {
+			// Zoom from start
+			config.end = config.start + zoomDuration
+		} else {
+			// Center zoom around midpoint
+			center := totalDuration / 2.0
+			config.start = center - zoomDuration/2.0
+			config.end = center + zoomDuration/2.0
+		}
+	}
+
+	// Clamp start and end to valid range
+	if config.start < 0 {
+		config.start = 0
+	}
+	if config.end > totalDuration || config.end == 0 {
+		config.end = totalDuration
+	}
+	if config.start >= config.end {
+		config.start = 0
+		config.end = totalDuration
+	}
+
+	// Calculate effective width based on resolution
+	effectiveWidth := int(float64(config.width) * config.resolution)
+	if effectiveWidth < 1 {
+		effectiveWidth = 1
+	}
+
 	// Generate waveform data
 	waveformData, err := w.GenerateView(WaveformOptions{
-		Start: 0,
-		End:   0, // Use full duration
-		Width: config.width,
+		Start: config.start,
+		End:   config.end,
+		Width: effectiveWidth,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to generate waveform view: %w", err)
@@ -150,7 +240,15 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 		p.X.Tick.LineStyle.Width = 0
 		p.X.LineStyle.Width = 0
 	}
-	
+
+	// Hide x-axis if requested
+	if config.hideXAxis {
+		p.X.Label.Text = ""
+		p.X.Tick.Marker = plot.ConstantTicks([]plot.Tick{})
+		p.X.Tick.LineStyle.Width = 0
+		p.X.LineStyle.Width = 0
+	}
+
 	// Hide y-axis if requested
 	if config.hideYAxis {
 		p.Y.Label.Text = ""
@@ -162,33 +260,32 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 	// Create XY points from waveform data
 	// We'll use a polygon to create the filled waveform visualization
 	points := make(plotter.XYs, 0, len(waveformData.Data))
-	
-	duration := w.Duration()
+
 	samplesPerPixel := waveformData.SamplesPerPixel
-	
+
 	// Create the waveform shape by plotting min/max pairs
 	for i := 0; i < waveformData.Length; i++ {
 		maxVal := waveformData.Data[i*2+1]
-		
-		// Calculate time position for this pixel
+
+		// Calculate time position for this pixel relative to the view start
 		samplePos := float64(i * samplesPerPixel)
-		timePos := samplePos / float64(w.SampleRate)
-		
+		timePos := config.start + (samplePos / float64(w.SampleRate))
+
 		// Normalize amplitude to -1.0 to 1.0 range
 		maxNorm := float64(maxVal) / 32768.0
-		
+
 		// Add points for the waveform
 		points = append(points, plotter.XY{X: timePos, Y: maxNorm})
 	}
-	
+
 	// Add points in reverse for the bottom of the waveform
 	for i := waveformData.Length - 1; i >= 0; i-- {
 		minVal := waveformData.Data[i*2]
-		
+
 		samplePos := float64(i * samplesPerPixel)
-		timePos := samplePos / float64(w.SampleRate)
+		timePos := config.start + (samplePos / float64(w.SampleRate))
 		minNormVal := float64(minVal) / 32768.0
-		
+
 		points = append(points, plotter.XY{X: timePos, Y: minNormVal})
 	}
 
@@ -202,9 +299,9 @@ func SavePlot(w *Waveform, filename string, opts ...Option) error {
 
 	p.Add(poly)
 
-	// Set X axis range to match duration
-	p.X.Min = 0
-	p.X.Max = duration
+	// Set X axis range to match the view
+	p.X.Min = config.start
+	p.X.Max = config.end
 
 	// Set Y axis range
 	p.Y.Min = -1.0

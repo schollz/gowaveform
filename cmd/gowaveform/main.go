@@ -1019,7 +1019,12 @@ var (
 	foregroundColor string
 	noTimestamp     bool
 	hideYAxis       bool
+	hideXAxis       bool
 	plotTitle       string
+	startTime       float64
+	endTime         float64
+	zoomDuration    float64
+	resolution      float64
 )
 
 var rootCmd = &cobra.Command{
@@ -1046,9 +1051,27 @@ You can also generate waveform plots directly to image files using the --output 
 
   # Generate a plot without timestamp axis
   gowaveform audio.wav --output waveform.jpg --no-timestamp
-  
+
   # Generate a plot with custom title and hidden y-axis
-  gowaveform audio.wav --output waveform.png --title "My Audio" --hide-y-axis`,
+  gowaveform audio.wav --output waveform.png --title "My Audio" --hide-y-axis
+
+  # Generate a plot with hidden x-axis and y-axis
+  gowaveform audio.wav --output waveform.png --hide-x-axis --hide-y-axis
+
+  # Generate a plot showing only seconds 2.5 to 5.0
+  gowaveform audio.wav --output waveform.png --start 2.5 --end 5.0
+
+  # Generate a plot showing 3 seconds starting from second 1.0
+  gowaveform audio.wav --output waveform.png --start 1.0 --zoom 3.0
+
+  # Generate a zoomed plot centered on the middle (5 seconds total duration)
+  gowaveform audio.wav --output waveform.png --zoom 5.0
+
+  # Generate a plot with half resolution (400px wide, but drawn with 200px of waveform data)
+  gowaveform audio.wav --output waveform.png --width 400 --resolution 0.5
+
+  # Generate a plot with double resolution for more detail
+  gowaveform audio.wav --output waveform.png --width 800 --resolution 2.0`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		wavFile := args[0]
@@ -1120,13 +1143,36 @@ func generatePlot(wavFile, outputFile string) error {
 	if noTimestamp {
 		opts = append(opts, gowaveform.OptionShowTimestamp(false))
 	}
-	
+
 	if hideYAxis {
 		opts = append(opts, gowaveform.OptionHideYAxis(true))
 	}
-	
+
+	if hideXAxis {
+		opts = append(opts, gowaveform.OptionHideXAxis(true))
+	}
+
 	if plotTitle != "" {
 		opts = append(opts, gowaveform.OptionSetTitle(plotTitle))
+	}
+
+	if resolution != 1.0 && resolution > 0 {
+		opts = append(opts, gowaveform.OptionSetResolution(resolution))
+	}
+
+	// Handle start/end/zoom options
+	if zoomDuration > 0 {
+		opts = append(opts, gowaveform.OptionSetZoom(zoomDuration))
+		if startTime > 0 {
+			opts = append(opts, gowaveform.OptionSetStart(startTime))
+		}
+	} else {
+		if startTime > 0 {
+			opts = append(opts, gowaveform.OptionSetStart(startTime))
+		}
+		if endTime > 0 {
+			opts = append(opts, gowaveform.OptionSetEnd(endTime))
+		}
 	}
 
 	// Save the plot
@@ -1139,7 +1185,7 @@ func generatePlot(wavFile, outputFile string) error {
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	
+
 	// Add flags for plot generation
 	rootCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file for waveform plot (PNG or JPEG)")
 	rootCmd.Flags().IntVar(&plotWidth, "width", 800, "Width of the plot in pixels")
@@ -1148,7 +1194,12 @@ func init() {
 	rootCmd.Flags().StringVar(&foregroundColor, "fg-color", "", "Foreground/waveform color in hex format (e.g., #0064C8)")
 	rootCmd.Flags().BoolVar(&noTimestamp, "no-timestamp", false, "Disable timestamp axis on the plot")
 	rootCmd.Flags().BoolVar(&hideYAxis, "hide-y-axis", false, "Hide the y-axis (amplitude) on the plot")
-	rootCmd.Flags().StringVar(&plotTitle, "title", "", "Set the title for the plot (default: 'Waveform')")
+	rootCmd.Flags().BoolVar(&hideXAxis, "hide-x-axis", false, "Hide the x-axis (time) on the plot")
+	rootCmd.Flags().StringVar(&plotTitle, "title", "", "Set the title for the plot")
+	rootCmd.Flags().Float64Var(&startTime, "start", 0, "Start time in seconds (default: 0)")
+	rootCmd.Flags().Float64Var(&endTime, "end", 0, "End time in seconds (default: full duration)")
+	rootCmd.Flags().Float64Var(&zoomDuration, "zoom", 0, "Duration in seconds to display (overrides end if start is set)")
+	rootCmd.Flags().Float64Var(&resolution, "resolution", 1.0, "Resolution multiplier for waveform generation (1.0 = full, 0.5 = half, 2.0 = double)")
 }
 
 func main() {
